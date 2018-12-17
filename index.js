@@ -32,7 +32,7 @@ RedisSMQ = (function(superClass) {
   extend(RedisSMQ, superClass);
 
   function RedisSMQ(options) {
-    var opts, ref, ref1;
+    var opts;
     if (options == null) {
       options = {};
     }
@@ -63,12 +63,19 @@ RedisSMQ = (function(superClass) {
     }, options);
     this.realtime = opts.realtime;
     this.redisns = opts.ns + ":";
-    if (((ref = opts.client) != null ? (ref1 = ref.constructor) != null ? ref1.name : void 0 : void 0) === "RedisClient") {
+    if (opts.client) {
       this.redis = opts.client;
+      if (this.redis.constructor.name === "Redis") {
+        this.isIoRedis = true;
+      }
     } else {
       this.redis = RedisInst.createClient(opts.port, opts.host, opts.options);
     }
-    this.connected = this.redis.connected || false;
+    if (this.isIoRedis) {
+      this.connected = this.redis.status === 'ready';
+    } else {
+      this.connected = this.redis.connected || false;
+    }
     if (this.connected) {
       this.emit("connect");
       this.initScript();
@@ -105,6 +112,7 @@ RedisSMQ = (function(superClass) {
     this.redis.multi(mc).exec((function(_this) {
       return function(err, resp) {
         var ms, q, ts;
+        resp = _this._ioRedisMultiToRedisMulti(resp);
         if (err) {
           _this._handleError(cb, err);
           return;
@@ -180,6 +188,7 @@ RedisSMQ = (function(superClass) {
         }
         mc = [["hsetnx", "" + _this.redisns + options.qname + ":Q", "vt", options.vt], ["hsetnx", "" + _this.redisns + options.qname + ":Q", "delay", options.delay], ["hsetnx", "" + _this.redisns + options.qname + ":Q", "maxsize", options.maxsize], ["hsetnx", "" + _this.redisns + options.qname + ":Q", "created", resp[0]], ["hsetnx", "" + _this.redisns + options.qname + ":Q", "modified", resp[0]]];
         _this.redis.multi(mc).exec(function(err, resp) {
+          resp = _this._ioRedisMultiToRedisMulti(resp);
           if (err) {
             _this._handleError(cb, err);
             return;
@@ -209,6 +218,7 @@ RedisSMQ = (function(superClass) {
     mc = [["zrem", key, options.id], ["hdel", key + ":Q", "" + options.id, options.id + ":rc", options.id + ":fr"]];
     this.redis.multi(mc).exec((function(_this) {
       return function(err, resp) {
+        resp = _this._ioRedisMultiToRedisMulti(resp);
         if (err) {
           _this._handleError(cb, err);
           return;
@@ -231,6 +241,7 @@ RedisSMQ = (function(superClass) {
     mc = [["del", key + ":Q"], ["del", key], ["srem", this.redisns + "QUEUES", options.qname]];
     this.redis.multi(mc).exec((function(_this) {
       return function(err, resp) {
+        resp = _this._ioRedisMultiToRedisMulti(resp);
         if (err) {
           _this._handleError(cb, err);
           return;
@@ -260,6 +271,7 @@ RedisSMQ = (function(superClass) {
         mc = [["hmget", key + ":Q", "vt", "delay", "maxsize", "totalrecv", "totalsent", "created", "modified"], ["zcard", key], ["zcount", key, resp[0] + "000", "+inf"]];
         _this.redis.multi(mc).exec(function(err, resp) {
           var o;
+          resp = _this._ioRedisMultiToRedisMulti(resp);
           if (err) {
             _this._handleError(cb, err);
             return;
@@ -438,6 +450,7 @@ RedisSMQ = (function(superClass) {
           mc.push(["zcard", key]);
         }
         _this.redis.multi(mc).exec(function(err, resp) {
+          resp = _this._ioRedisMultiToRedisMulti(resp);
           if (err) {
             _this._handleError(cb, err);
             return;
@@ -487,6 +500,7 @@ RedisSMQ = (function(superClass) {
             mc.push(["hset", "" + _this.redisns + options.qname + ":Q", item, options[item]]);
           }
           _this.redis.multi(mc).exec(function(err, resp) {
+            resp = _this._ioRedisMultiToRedisMulti(resp);
             if (err) {
               _this._handleError(cb, err);
               return;
@@ -496,6 +510,21 @@ RedisSMQ = (function(superClass) {
         });
       };
     })(this));
+  };
+
+  RedisSMQ.prototype._ioRedisMultiToRedisMulti = function(multiResult) {
+    if (this.isIoRedis) {
+      multiResult = multiResult.map(function(r) {
+        var err, val;
+        err = r[0];
+        val = r[1];
+        if (err) {
+          throw err;
+        }
+        return val;
+      });
+    }
+    return multiResult;
   };
 
   RedisSMQ.prototype._formatZeroPad = function(num, count) {
