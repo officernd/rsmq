@@ -72,7 +72,7 @@ RedisSMQ = (function(superClass) {
       this.redis = RedisInst.createClient(opts.port, opts.host, opts.options);
     }
     if (this.isIoRedis) {
-      this.connected = this.redis.status === 'ready';
+      this.connected = this.redis.status === 'connect';
     } else {
       this.connected = this.redis.connected || false;
     }

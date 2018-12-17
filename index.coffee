@@ -56,7 +56,7 @@ class RedisSMQ extends EventEmitter
 			@redis = RedisInst.createClient(opts.port, opts.host, opts.options)
 
 		if @isIoRedis
-			@connected = @redis.status == 'ready'
+			@connected = @redis.status == 'connect'
 		else
 			@connected = @redis.connected or false
 
